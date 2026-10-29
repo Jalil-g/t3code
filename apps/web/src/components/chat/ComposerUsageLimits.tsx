@@ -76,6 +76,7 @@ export function modelFallbackBannerItem({
   resetsAt,
   timestampFormat,
   onUseDefault,
+  onDismiss,
 }: {
   readonly fallbackModelName: string;
   readonly defaultProviderName: string;
@@ -83,6 +84,7 @@ export function modelFallbackBannerItem({
   readonly resetsAt: string | null;
   readonly timestampFormat: TimestampFormat;
   readonly onUseDefault: () => void;
+  readonly onDismiss: () => void;
 }): ComposerBannerStackItem {
   return {
     id: "fallback-model",
@@ -95,6 +97,8 @@ export function modelFallbackBannerItem({
         Use {defaultModelName}
       </Button>
     ),
+    dismissLabel: "Dismiss fallback model notice",
+    onDismiss,
   };
 }
 
