@@ -51,6 +51,7 @@ import {
   rectsIntersect,
   wheelZoomFactor,
   zoomViewAt,
+  type CanvasView,
   type Point,
   type Rect,
 } from "./geometry";
@@ -203,6 +204,21 @@ function ToolbarButton(props: {
   );
 }
 
+let pendingView: CanvasView | null = null;
+let pendingViewFrame: number | null = null;
+
+/** Coalesce view changes to one store update per frame; trackpads send several events per frame. */
+function updateViewOnNextFrame(update: (view: CanvasView) => CanvasView): void {
+  pendingView = update(pendingView ?? useWorkspaceCanvasStore.getState().view);
+  if (pendingViewFrame !== null) return;
+  pendingViewFrame = requestAnimationFrame(() => {
+    pendingViewFrame = null;
+    const next = pendingView;
+    pendingView = null;
+    if (next) useWorkspaceCanvasStore.getState().setView(next);
+  });
+}
+
 function zoomAroundCenter(factor: number) {
   const { view, setView } = useWorkspaceCanvasStore.getState();
   const { viewport } = useCanvasSessionStore.getState();
@@ -306,9 +322,11 @@ function CanvasToolbar() {
 
 function CanvasWorld(props: { readonly children: React.ReactNode }) {
   const view = useWorkspaceCanvasStore((state) => state.view);
+  // A cached layer moves without repainting the panes; dropping it on settle re-rasterizes crisply.
+  const moving = useCanvasSessionStore((state) => state.moving);
   return (
     <div
-      className="absolute top-0 left-0 origin-top-left"
+      className={cn("absolute top-0 left-0 origin-top-left", moving && "will-change-transform")}
       style={{ transform: `translate(${view.panX}px, ${view.panY}px) scale(${view.zoom})` }}
     >
       {props.children}
@@ -316,16 +334,24 @@ function CanvasWorld(props: { readonly children: React.ReactNode }) {
   );
 }
 
+// The dot grid repeats every `spacing` pixels, so moving it by the pan modulo the spacing
+// looks like an endless pan while only a compositor transform changes.
 function CanvasBackdrop() {
   const view = useWorkspaceCanvasStore((state) => state.view);
   const spacing = 24 * view.zoom;
+  const offsetX = ((view.panX % spacing) + spacing) % spacing;
+  const offsetY = ((view.panY % spacing) + spacing) % spacing;
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute inset-0 [background-image:radial-gradient(var(--color-border)_1px,transparent_1px)]"
+      className="pointer-events-none absolute will-change-transform [background-image:radial-gradient(var(--color-border)_1px,transparent_1px)]"
       style={{
+        top: -spacing,
+        left: -spacing,
+        width: `calc(100% + ${spacing * 2}px)`,
+        height: `calc(100% + ${spacing * 2}px)`,
         backgroundSize: `${spacing}px ${spacing}px`,
-        backgroundPosition: `${view.panX}px ${view.panY}px`,
+        transform: `translate(${offsetX}px, ${offsetY}px)`,
       }}
     />
   );
@@ -338,11 +364,12 @@ function CanvasFrames({ routeItemKey }: { readonly routeItemKey: string | null }
   );
   const expandedFrameId = useCanvasSessionStore((state) => state.expandedFrameId);
   const viewport = useCanvasSessionStore((state) => state.viewport);
+  const liveView = useCanvasSessionStore((state) => state.liveView);
   // A joined string so pans that keep the same live set skip the re-render.
   const liveIds = useWorkspaceCanvasStore((state) =>
     selectLiveFrameIds({
       frames: state.frames,
-      view: state.view,
+      view: liveView ?? state.view,
       viewport,
       pinnedFrameIds: [routeFrameId, expandedFrameId],
     }).join("\n"),
@@ -466,21 +493,21 @@ function CanvasViewport(props: {
         return;
       }
       event.preventDefault();
-      const { view, setView } = useWorkspaceCanvasStore.getState();
       if (zooming) {
         const bounds = viewportElement.getBoundingClientRect();
-        setView(
-          zoomViewAt(view, wheelZoomFactor(event.deltaY, event.deltaMode), {
-            x: event.clientX - bounds.left,
-            y: event.clientY - bounds.top,
-          }),
-        );
+        const anchor = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+        const factor = wheelZoomFactor(event.deltaY, event.deltaMode);
+        updateViewOnNextFrame((view) => zoomViewAt(view, factor, anchor));
         return;
       }
       const scale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 400 : 1;
       const dx = event.shiftKey && event.deltaX === 0 ? event.deltaY : event.deltaX;
       const dy = event.shiftKey && event.deltaX === 0 ? 0 : event.deltaY;
-      setView({ ...view, panX: view.panX - dx * scale, panY: view.panY - dy * scale });
+      updateViewOnNextFrame((view) => ({
+        ...view,
+        panX: view.panX - dx * scale,
+        panY: view.panY - dy * scale,
+      }));
     };
     viewportElement.addEventListener("wheel", onWheel, { passive: false });
     return () => viewportElement.removeEventListener("wheel", onWheel);
@@ -591,9 +618,11 @@ function CanvasViewport(props: {
     const origin = useWorkspaceCanvasStore.getState().view;
     startPointerDrag(event, {
       onMove: (delta) =>
-        useWorkspaceCanvasStore
-          .getState()
-          .setView({ ...origin, panX: origin.panX + delta.x, panY: origin.panY + delta.y }),
+        updateViewOnNextFrame(() => ({
+          ...origin,
+          panX: origin.panX + delta.x,
+          panY: origin.panY + delta.y,
+        })),
       onEnd: (_endEvent, moved) => {
         if (!moved) useCanvasSessionStore.getState().setSelection([]);
       },

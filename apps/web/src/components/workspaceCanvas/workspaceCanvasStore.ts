@@ -373,13 +373,17 @@ function dismissItems(
 
 export const useWorkspaceCanvasStore = create<WorkspaceCanvasState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       frames: {},
       regions: {},
       view: DEFAULT_VIEW,
       minimapOpen: true,
       dismissed: {},
-      setView: (view) => set({ view: { ...view, zoom: clampZoom(view.zoom) } }),
+      setView: (view) => {
+        const previous = get().view;
+        set({ view: { ...view, zoom: clampZoom(view.zoom) } });
+        markViewMoving(previous);
+      },
       reconcile: (input) => set((state) => reconcileLayout(state, input)),
       ensureItem: (item, projectKey) =>
         set((state) => {
@@ -581,6 +585,10 @@ interface CanvasSessionState {
   guides: ReadonlyArray<SnapGuide>;
   /** The frame a dragged frame would join as a tab when dropped. */
   dropTargetFrameId: string | null;
+  /** True while the view pans or zooms; panes stay as they are until it settles. */
+  moving: boolean;
+  /** The view that picked the live panes; it trails the real view until movement settles. */
+  liveView: CanvasView | null;
   setSelection: (frameIds: ReadonlyArray<string>) => void;
   toggleSelected: (frameId: string) => void;
   setFocusedFrameId: (frameId: string | null) => void;
@@ -604,6 +612,8 @@ export const useCanvasSessionStore = create<CanvasSessionState>()((set) => ({
   interacting: false,
   guides: EMPTY_GUIDES,
   dropTargetFrameId: null,
+  moving: false,
+  liveView: null,
   setSelection: (frameIds) =>
     set({ selectedFrameIds: frameIds.length === 0 ? EMPTY_SELECTION : frameIds }),
   toggleSelected: (frameId) =>
@@ -666,4 +676,24 @@ export function selectLiveFrameIds(input: {
     live.add(id);
   }
   return [...live].toSorted();
+}
+
+const VIEW_SETTLE_MS = 150;
+let viewSettleTimer: ReturnType<typeof setTimeout> | null = null;
+
+// Swapping live panes mounts whole thread views, so the live set only follows the view once
+// panning or zooming pauses.
+function markViewMoving(previous: CanvasView): void {
+  const session = useCanvasSessionStore.getState();
+  if (!session.moving || session.liveView === null) {
+    useCanvasSessionStore.setState({ moving: true, liveView: session.liveView ?? previous });
+  }
+  if (viewSettleTimer !== null) clearTimeout(viewSettleTimer);
+  viewSettleTimer = setTimeout(() => {
+    viewSettleTimer = null;
+    useCanvasSessionStore.setState({
+      moving: false,
+      liveView: useWorkspaceCanvasStore.getState().view,
+    });
+  }, VIEW_SETTLE_MS);
 }
