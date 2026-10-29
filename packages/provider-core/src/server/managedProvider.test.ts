@@ -216,7 +216,7 @@ describe("makeManagedServerProvider", () => {
             const count = yield* Ref.updateAndGet(calls, (count) => count + 1);
             if (count === 2) {
               yield* Deferred.succeed(usageProbeStarted, undefined);
-              yield* Effect.never;
+              return yield* Effect.never;
             }
             if (count === 3) {
               yield* Deferred.succeed(statusProbeStarted, undefined);
