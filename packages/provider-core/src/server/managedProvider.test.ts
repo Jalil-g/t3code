@@ -199,6 +199,56 @@ describe("makeManagedServerProvider", () => {
       }),
     ).pipe(Effect.provide(layerAlwaysRunTest)),
   );
+  it.effect("keeps the waiting usage refresh's claim when the running one is interrupted", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const calls = yield* Ref.make(0);
+        const usageProbeStarted = yield* Deferred.make<void>();
+        const statusProbeStarted = yield* Deferred.make<void>();
+        const releaseStatusProbe = yield* Deferred.make<void>();
+        const provider = yield* makeManagedServerProvider<TestSettings>({
+          resolveMaintenance: () => Effect.succeed(maintenanceCapabilities),
+          getSettings: Effect.succeed({ enabled: true }),
+          streamSettings: Stream.empty,
+          haveSettingsChanged: () => false,
+          initialSnapshot: () => Effect.succeed(initialSnapshot),
+          checkProvider: Effect.gen(function* () {
+            const count = yield* Ref.updateAndGet(calls, (count) => count + 1);
+            if (count === 2) {
+              yield* Deferred.succeed(usageProbeStarted, undefined);
+              yield* Effect.never;
+            }
+            if (count === 3) {
+              yield* Deferred.succeed(statusProbeStarted, undefined);
+              yield* Deferred.await(releaseStatusProbe);
+            }
+            return {
+              ...refreshedSnapshot,
+              usageLimits: { checkedAt: refreshedSnapshot.checkedAt, windows: [] },
+            } satisfies ServerProvider;
+          }),
+          refreshOnInterval: false,
+        });
+        yield* provider.streamChanges.pipe(Stream.take(1), Stream.runDrain);
+        const running = yield* provider.refreshUsage!.pipe(Effect.forkChild);
+        yield* Deferred.await(usageProbeStarted);
+        const status = yield* provider.refresh.pipe(Effect.forkChild({ startImmediately: true }));
+        const waiting = yield* provider.refreshUsage!.pipe(
+          Effect.forkChild({ startImmediately: true }),
+        );
+        yield* Fiber.interrupt(running);
+        yield* Deferred.await(statusProbeStarted);
+        const extra = yield* provider.refreshUsage!.pipe(
+          Effect.forkChild({ startImmediately: true }),
+        );
+        yield* Deferred.succeed(releaseStatusProbe, undefined);
+        yield* Fiber.join(status);
+        yield* Fiber.join(waiting);
+        yield* Fiber.join(extra);
+        assert.strictEqual(yield* Ref.get(calls), 4);
+      }),
+    ).pipe(Effect.provide(layerAlwaysRunTest)),
+  );
   it.effect(
     "runs the initial provider check in the background and streams the refreshed snapshot",
     () =>
