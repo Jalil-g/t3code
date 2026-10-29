@@ -1842,6 +1842,12 @@ code {
   -webkit-app-region: no-drag;
 }
 
+/* Canvas panes reuse thread headers, which drag the window in Electron. Inside a pane they
+   must not, or pane drags would move the window. */
+[data-workspace-canvas] .drag-region {
+  -webkit-app-region: no-drag;
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: var(--app-scrollbar-width);
