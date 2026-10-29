@@ -1661,6 +1661,11 @@ export default function ChatView(props: ChatViewProps) {
     resumeCompactionPermanentlyDismissed,
     setResumeCompactionPermanentlyDismissed,
   ]);
+  const [dismissedFallbackWindow, setDismissedFallbackWindow] = useLocalStorage(
+    `t3code:fallback-notice-dismissed:${environmentId}`,
+    null,
+    Schema.NullOr(Schema.String),
+  );
   const providerStatusBannerKey = getProviderStatusBannerKey(activeProviderStatus);
   const [dismissedProviderStatusBannerKey, setDismissedProviderStatusBannerKey] = useState<
     string | null
@@ -2568,8 +2573,14 @@ export default function ChatView(props: ChatViewProps) {
           composerSelectedModelSelection.model === fallbackSelection?.model))
         ? draftFallback.fallback
         : null;
+    const fallbackWindow = fallback
+      ? `${fallback.provider.instanceId}:${fallback.resetsAt ?? ""}`
+      : null;
     const fallbackItems: ComposerBannerStackItem[] =
-      fallback && fallbackSelection && defaultSelection
+      fallback &&
+      fallbackSelection &&
+      defaultSelection &&
+      fallbackWindow !== dismissedFallbackWindow
         ? [
             modelFallbackBannerItem({
               fallbackModelName:
@@ -2585,6 +2596,7 @@ export default function ChatView(props: ChatViewProps) {
               timestampFormat,
               onUseDefault: () =>
                 onProviderModelSelectStable(defaultSelection.instanceId, defaultSelection.model),
+              onDismiss: () => setDismissedFallbackWindow(fallbackWindow),
             }),
           ]
         : [];
