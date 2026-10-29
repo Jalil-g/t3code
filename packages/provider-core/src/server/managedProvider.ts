@@ -61,6 +61,7 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
 > {
   const host = yield* ProviderHost.ProviderHost;
   const refreshSemaphore = yield* Semaphore.make(1);
+  const usageRefreshQueued = yield* Ref.make(false);
   const changesPubSub = yield* Effect.acquireRelease(
     PubSub.unbounded<ServerProvider>(),
     PubSub.shutdown,
@@ -225,12 +226,17 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
       snapshot.usageLimits.unavailable?.reason === "unsupported"
     )
       return;
-    yield* refreshSemaphore.withPermitsIfAvailable(1)(
-      input.getSettings.pipe(
-        Effect.tap(() => input.invalidateUsageCache ?? Effect.void),
-        Effect.flatMap((settings) => applySnapshotBase(settings, { forceRefresh: true })),
-      ),
-    );
+    // An in-flight refresh may have read cached usage, so one refresh waits behind it.
+    if (yield* Ref.getAndSet(usageRefreshQueued, true)) return;
+    yield* refreshSemaphore
+      .withPermits(1)(
+        Ref.set(usageRefreshQueued, false).pipe(
+          Effect.andThen(input.invalidateUsageCache ?? Effect.void),
+          Effect.andThen(input.getSettings),
+          Effect.flatMap((settings) => applySnapshotBase(settings, { forceRefresh: true })),
+        ),
+      )
+      .pipe(Effect.onInterrupt(() => Ref.set(usageRefreshQueued, false)));
   });
 
   const shouldRefreshOnInterval = Effect.gen(function* () {

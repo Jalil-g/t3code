@@ -139,7 +139,7 @@ const enrichedSnapshotSecond: ServerProvider = {
 };
 
 describe("makeManagedServerProvider", () => {
-  it.effect("invalidates cached usage before probing and skips an in-flight refresh", () =>
+  it.effect("invalidates cached usage and queues one refresh behind an in-flight refresh", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const calls = yield* Ref.make(0);
@@ -149,7 +149,7 @@ describe("makeManagedServerProvider", () => {
           () =>
             Effect.gen(function* () {
               const count = yield* Ref.updateAndGet(calls, (count) => count + 1);
-              if (count > 1) {
+              if (count === 2) {
                 yield* Deferred.succeed(probeStarted, undefined);
                 yield* Deferred.await(releaseProbe);
               }
@@ -185,11 +185,16 @@ describe("makeManagedServerProvider", () => {
         assert.strictEqual(yield* Ref.get(calls), 1);
         const refresh = yield* provider.refreshUsage!.pipe(Effect.forkChild);
         yield* Deferred.await(probeStarted);
+        const queued = yield* provider.refreshUsage!.pipe(
+          Effect.forkChild({ startImmediately: true }),
+        );
         yield* provider.refreshUsage!;
         assert.strictEqual(yield* Ref.get(calls), 2);
         assert.strictEqual((yield* provider.getSnapshot).usageLimits?.windows[0]?.usedPercent, 20);
         yield* Deferred.succeed(releaseProbe, undefined);
         yield* Fiber.join(refresh);
+        yield* Fiber.join(queued);
+        assert.strictEqual(yield* Ref.get(calls), 3);
         assert.strictEqual((yield* provider.getSnapshot).usageLimits?.windows[0]?.usedPercent, 100);
       }),
     ).pipe(Effect.provide(layerAlwaysRunTest)),
