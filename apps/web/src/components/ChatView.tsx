@@ -406,6 +406,8 @@ type ChatViewProps =
       draftId: DraftId;
     };
 
+const DismissedFallbackWindowSchema = Schema.NullOr(Schema.String);
+
 export default function ChatView(props: ChatViewProps) {
   const {
     environmentId,
@@ -1664,7 +1666,7 @@ export default function ChatView(props: ChatViewProps) {
   const [dismissedFallbackWindow, setDismissedFallbackWindow] = useLocalStorage(
     `t3code:fallback-notice-dismissed:${environmentId}`,
     null,
-    Schema.NullOr(Schema.String),
+    DismissedFallbackWindowSchema,
   );
   const providerStatusBannerKey = getProviderStatusBannerKey(activeProviderStatus);
   const [dismissedProviderStatusBannerKey, setDismissedProviderStatusBannerKey] = useState<
