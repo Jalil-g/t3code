@@ -9,6 +9,7 @@ import type { ThreadPanelPresentation } from "../../rightPanelLayout";
 import { PopoverCreateHandle, PopoverTrigger } from "../ui/popover";
 import { Toggle } from "../ui/toggle";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { WorkspaceCanvasToggle } from "../workspaceCanvas/WorkspaceCanvasToggle";
 
 export interface PanelLayoutControlsProps {
   showThreadPanelControl?: boolean;
@@ -82,6 +83,7 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
       className="flex h-full shrink-0 items-center gap-1 [-webkit-app-region:no-drag]"
       data-panel-layout-controls
     >
+      <WorkspaceCanvasToggle />
       {showThreadPanelControl ? threadPanelControl : null}
       {showTerminalControl ? (
         <Tooltip>

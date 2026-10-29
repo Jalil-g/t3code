@@ -18,6 +18,7 @@ export function LabsSettingsPanel() {
       <SettingsSection id="beta" title="Beta">
         <BoringSidebarRow />
         <BoringSidebarMultilineRow />
+        <WorkspaceCanvasRow />
         {/* Clerk is only mounted when this build has T3 Connect. */}
         {hasCloudPublicConfig() ? <GuestLinksRowWithSignIn /> : <GuestLinksRow />}
         <LinkedEnvironmentsRow />
@@ -63,6 +64,26 @@ function BoringSidebarMultilineRow() {
             updateSettings({ boringSidebarMultilineRows: Boolean(checked) })
           }
           aria-label="Two-line folder rows"
+        />
+      }
+    />
+  );
+}
+
+function WorkspaceCanvasRow() {
+  const settings = useScopedSettings();
+  const updateSettings = useUpdateScopedSettings();
+  return (
+    <SettingsRow
+      {...searchableSetting("workspace-canvas")}
+      description="Lay threads and their terminals out as panes on an infinite canvas you can pan and zoom, grouped into project regions. Turn it off to return to the single-thread view."
+      control={
+        <Switch
+          checked={settings.workspaceCanvasEnabled}
+          onCheckedChange={(checked) =>
+            updateSettings({ workspaceCanvasEnabled: Boolean(checked) })
+          }
+          aria-label="Canvas view"
         />
       }
     />

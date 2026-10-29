@@ -1,5 +1,5 @@
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
-import { Outlet, createFileRoute, redirect, useMatches } from "@tanstack/react-router";
+import { Outlet, createFileRoute, redirect, useLocation, useMatches } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { ThreadRouteView } from "../components/ThreadRouteView";
@@ -9,6 +9,8 @@ import { resolveThreadRouteTarget, type ThreadRouteTarget } from "../threadRoute
 import { retainThreadFindForRoute } from "../components/chat/threadFindStore";
 import { ThreadLinkPrompt } from "../components/promptLinks/ThreadLinkPrompt";
 import { useThreadRouteTarget } from "../hooks/useThreadRouteTarget";
+import { useClientSettings } from "../hooks/useSettings";
+import { WorkspaceCanvas } from "../components/workspaceCanvas/WorkspaceCanvas";
 
 function threadRouteTargetKey(target: ThreadRouteTarget | null) {
   if (!target) return null;
@@ -28,12 +30,18 @@ function ChatRouteLayout() {
     setBackgroundTarget(threadTarget);
   }
   const shownTarget = modalOpen ? backgroundTarget : threadTarget;
+  const canvasEnabled = useClientSettings((settings) => settings.workspaceCanvasEnabled);
+  const onHome = useLocation({ select: (location) => location.pathname === "/" });
+  // The canvas stands in for the thread views and home; other pages keep their own screens.
+  const showCanvas = canvasEnabled && (shownTarget !== null || onHome || modalOpen);
   return (
     <>
       {shownTarget?.kind === "server" && !modalOpen ? (
         <ThreadLinkPrompt threadRef={shownTarget.threadRef} />
       ) : null}
-      {shownTarget ? (
+      {showCanvas ? (
+        <WorkspaceCanvas routeTarget={shownTarget} background={modalOpen} />
+      ) : shownTarget ? (
         <ThreadRouteView target={shownTarget} background={modalOpen} />
       ) : modalOpen ? (
         <SidebarInset className="h-dvh" />

@@ -432,6 +432,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["beta folders project tree legacy old classic sidebar"],
   },
   {
+    id: "workspace-canvas",
+    title: "Canvas view",
+    to: "/settings/labs",
+    searchTerms: ["beta canvas infinite pan zoom panes board spatial layout 49 grid"],
+  },
+  {
     id: "boring-sidebar-multiline",
     title: "Two-line folder rows",
     to: "/settings/labs",
